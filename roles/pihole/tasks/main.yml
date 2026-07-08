@@ -1,0 +1,135 @@
+---
+- name: Verify target is running Oracle Linux 9
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['distribution'] == "OracleLinux"
+      - ansible_facts['distribution_major_version'] == "9"
+    fail_msg: >-
+      This role targets Oracle Linux 9. Detected
+      {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_major_version'] }}.
+    success_msg: "Oracle Linux 9 detected."
+
+- name: Install required packages
+  ansible.builtin.dnf:
+    name: "{{ pihole_dependencies }}"
+    state: present
+
+- name: Detect default network interface
+  ansible.builtin.set_fact:
+    pihole_install_interface: >-
+      {{ pihole_interface if pihole_interface | length > 0
+         else ansible_facts['default_ipv4']['interface'] }}
+
+- name: Ensure Pi-hole configuration directory exists
+  ansible.builtin.file:
+    path: "{{ pihole_etc_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Deploy setupVars.conf for unattended install
+  ansible.builtin.template:
+    src: setupVars.conf.j2
+    dest: "{{ pihole_etc_dir }}/setupVars.conf"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Check whether Pi-hole is already installed
+  ansible.builtin.stat:
+    path: /usr/local/bin/pihole
+  register: pihole_binary
+
+- name: Download Pi-hole installer
+  ansible.builtin.get_url:
+    url: https://install.pi-hole.net
+    dest: /tmp/pihole-install.sh
+    mode: "0755"
+  when: not pihole_binary.stat.exists
+
+- name: Run Pi-hole unattended installer
+  ansible.builtin.command:
+    cmd: /tmp/pihole-install.sh --unattended
+  environment:
+    PIHOLE_SKIP_OS_CHECK: "{{ 'true' if pihole_skip_os_check else 'false' }}"
+  when: not pihole_binary.stat.exists
+  register: pihole_install
+  changed_when: "'Installation Complete' in pihole_install.stdout or pihole_install.rc == 0"
+  notify: Restart pihole-FTL
+
+- name: Remove Pi-hole installer script
+  ansible.builtin.file:
+    path: /tmp/pihole-install.sh
+    state: absent
+
+- name: Set Pi-hole web admin password
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/pihole
+      - setpassword
+      - "{{ pihole_web_password }}"
+  no_log: true
+  register: pihole_setpassword
+  changed_when: true
+  failed_when:
+    - pihole_setpassword.rc != 0
+    - "'command not found' not in pihole_setpassword.stderr"
+    - "'Unknown' not in pihole_setpassword.stderr"
+
+- name: Set Pi-hole web admin password (legacy v5 syntax)
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/pihole
+      - -a
+      - -p
+      - "{{ pihole_web_password }}"
+  no_log: true
+  changed_when: true
+  when: pihole_setpassword.rc | default(0) != 0
+
+- name: Add adlists to Pi-hole gravity database
+  ansible.builtin.command:
+    cmd: >-
+      sqlite3 {{ pihole_etc_dir }}/gravity.db
+      "INSERT OR IGNORE INTO adlist (address, enabled) VALUES ('{{ item }}', 1);
+      SELECT changes();"
+  loop: "{{ pihole_adlists }}"
+  register: pihole_adlist_add
+  changed_when: pihole_adlist_add.stdout | trim != "0"
+  notify: Update pihole gravity
+
+- name: Ensure Pi-hole configuration directory is owned by the service user
+  ansible.builtin.file:
+    path: "{{ pihole_etc_dir }}"
+    state: directory
+    owner: "{{ pihole_system_user }}"
+    group: "{{ pihole_system_group }}"
+    recurse: true
+
+- name: Check whether firewalld is active
+  ansible.builtin.command:
+    cmd: systemctl is-active firewalld
+  register: pihole_firewalld_status
+  changed_when: false
+  failed_when: false
+
+- name: Open firewall ports for DNS and web interface
+  ansible.posix.firewalld:
+    service: "{{ item.service | default(omit) }}"
+    port: "{{ item.port | default(omit) }}"
+    permanent: true
+    immediate: true
+    state: enabled
+  loop:
+    - { service: "dns" }
+    - { port: "80/tcp" }
+  when:
+    - pihole_configure_firewall | bool
+    - pihole_firewalld_status.stdout == "active"
+
+- name: Ensure pihole-FTL service is enabled and running
+  ansible.builtin.systemd:
+    name: pihole-FTL
+    state: started
+    enabled: true

@@ -1,0 +1,32 @@
+---
+# Default values for the pihole role. Most of these are overridden by
+# group_vars/pihole.yml but are duplicated here so the role is self-contained.
+
+pihole_dns_upstream:
+  - "1.1.1.1"
+  - "1.0.0.1"
+
+pihole_web_password: "changeme"
+pihole_interface: ""
+pihole_dns_listening_mode: "local"
+pihole_configure_firewall: true
+pihole_skip_os_check: true
+
+# Block lists (adlists) to register in Pi-hole's gravity database.
+pihole_adlists:
+  - "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts"
+
+# Location of the Pi-hole configuration directory.
+pihole_etc_dir: "/etc/pihole"
+
+# System user/group that the pihole-FTL service runs as. Pi-hole's gravity
+# updates run as this user, so files under pihole_etc_dir must be owned by it.
+pihole_system_user: "pihole"
+pihole_system_group: "pihole"
+
+# Packages required to fetch and run the unattended installer.
+pihole_dependencies:
+  - curl
+  - git
+  - ca-certificates
+  - sqlite

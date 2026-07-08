@@ -1,0 +1,7 @@
+---
+- name: Deploy Pi-hole on Oracle Linux 9 servers
+  hosts: pihole
+  become: true
+  gather_facts: true
+  roles:
+    - pihole

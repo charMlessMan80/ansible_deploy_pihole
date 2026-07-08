@@ -1,0 +1,6 @@
+# Ansible sensitive files
+inventory.ini
+group_vars/pihole.yml
+
+# Ansible artifacts
+*.retry

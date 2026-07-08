@@ -1,0 +1,30 @@
+---
+# Variables for the pihole group.
+# Override sensitive values (especially the web admin password) with
+# ansible-vault or the command line, e.g.:
+#   ansible-playbook site.yml -e "pihole_web_password=YourStrongPassword"
+
+# Upstream DNS servers used by Pi-hole (Cloudflare by default).
+pihole_dns_upstream:
+  - "1.1.1.1"
+  - "1.0.0.1"
+
+# Admin web interface password. CHANGE THIS (ideally via vault).
+pihole_web_password: "ChangeMeStrongPassword"
+
+# Interface Pi-hole should listen on. Leave empty to auto-detect the
+# default interface on each host.
+pihole_interface: ""
+
+# DNS listening behaviour: local, single, bind, or all.
+pihole_dns_listening_mode: "local"
+
+# Block lists (adlists) to register in Pi-hole.
+pihole_adlists:
+  - "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts"
+
+# Whether to open the required ports in firewalld.
+pihole_configure_firewall: true
+
+# Pi-hole is not officially supported on Oracle Linux, so skip the OS check.
+pihole_skip_os_check: true

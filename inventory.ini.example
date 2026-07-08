@@ -1,0 +1,7 @@
+[pihole]
+pihole-01 ansible_host=192.0.2.1
+pihole-02 ansible_host=192.0.2.2
+
+[pihole:vars]
+ansible_user=youruser
+ansible_python_interpreter=/usr/bin/python3
